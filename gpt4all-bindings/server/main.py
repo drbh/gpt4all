@@ -3,28 +3,63 @@ from typing import List, Optional
 from gpt4all import GPT4All
 from typing_extensions import Annotated
 from pydantic import BaseModel
+import sqlite3
+from sqlite3 import Error
+import os
+
 
 class Message(BaseModel):
     role: str
     content: str
+    chat_id: int
+
 
 class UserInput(BaseModel):
     message: str
+    chat_id: int
+
 
 class ChatCompletionResponse(BaseModel):
     messages: List[Message]
 
-MESSAGES = [
+
+INIT_MESSAGES = [
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "Hello there."},
     {"role": "assistant", "content": "Hi, how can I help you?"},
 ]
 
-
 MODEL: str = "ggml-gpt4all-j-v1.3-groovy"
 N_THREADS: int = 6
 
+DATABASE = "chat_history.db"
+
 app = FastAPI()
+
+
+def create_connection():
+    conn = None
+    try:
+        conn = sqlite3.connect(DATABASE)
+        return conn
+    except Error as e:
+        print(e)
+    return conn
+
+
+def create_table(conn):
+    try:
+        sql_create_table = """CREATE TABLE IF NOT EXISTS messages (
+                                        id integer PRIMARY KEY AUTOINCREMENT,
+                                        role text NOT NULL,
+                                        content text NOT NULL,
+                                        chat_id integer NOT NULL
+                                    ); """
+        c = conn.cursor()
+        c.execute(sql_create_table)
+    except Error as e:
+        print(e)
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -36,9 +71,45 @@ async def startup_event():
         # set number of threads
         gpt4all_instance.model.set_thread_count(N_THREADS)
 
+    conn = create_connection()
+    if conn is not None:
+        create_table(conn)
+    else:
+        print("Error! Cannot create the database connection.")
+
+
 @app.post("/message", response_model=ChatCompletionResponse)
 async def chat(input: UserInput):
-    MESSAGES.append({"role": "user", "content": input.message})
+    conn = create_connection()
+    cursor = conn.cursor()
+
+    # check if there is any message in the db with the chat id
+    is_new_chat = cursor.execute(
+        "SELECT * FROM messages WHERE chat_id=?", (input.chat_id,)
+    ).fetchone()
+
+    if is_new_chat is None:
+        # add all init messages to the db
+        for message in INIT_MESSAGES:
+            cursor.execute(
+                "INSERT INTO messages(role, content, chat_id) VALUES(?, ?, ?)",
+                (message["role"], message["content"], input.chat_id),
+            )
+            conn.commit()
+
+    # Insert user's message to the database
+    cursor.execute(
+        "INSERT INTO messages(role, content, chat_id) VALUES(?, ?, ?)",
+        ("user", input.message, input.chat_id),
+    )
+    conn.commit()
+
+    # Fetch all messages for the chat id
+    cursor.execute("SELECT * FROM messages WHERE chat_id=?", (input.chat_id,))
+    MESSAGES = [
+        {"role": row[1], "content": row[2], "chat_id": row[3]}
+        for row in cursor.fetchall()
+    ]
 
     # execute chat completion
     full_response = gpt4all_instance.chat_completion(
@@ -59,11 +130,40 @@ async def chat(input: UserInput):
         verbose=False,
     )
 
-    # record assistant's response to messages
-    MESSAGES.append(full_response.get("choices")[0].get("message"))
-    
+    # Add assistant's response to the database
+    cursor.execute(
+        "INSERT INTO messages(role, content, chat_id) VALUES(?, ?, ?)",
+        (
+            "assistant",
+            full_response.get("choices")[0].get("message").get("content"),
+            input.chat_id,
+        ),
+    )
+    conn.commit()
+
+    # Fetch all messages for the chat id
+    cursor.execute("SELECT * FROM messages WHERE chat_id=?", (input.chat_id,))
+    MESSAGES = [
+        {"role": row[1], "content": row[2], "chat_id": row[3]}
+        for row in cursor.fetchall()
+    ]
+    conn.close()
+
     return {"messages": MESSAGES}
 
-@app.get("/messages", response_model=List[Message])
-async def get_messages():
+
+@app.get("/messages/{chat_id}", response_model=List[Message])
+async def get_messages(chat_id: int):
+    conn = create_connection()
+    cursor = conn.cursor()
+
+    # Fetch all messages for the chat id
+    cursor.execute("SELECT * FROM messages WHERE chat_id=?", (chat_id,))
+    MESSAGES = [
+        {"role": row[1], "content": row[2], "chat_id": row[3]}
+        for row in cursor.fetchall()
+    ]
+
+    conn.close()
+
     return MESSAGES
