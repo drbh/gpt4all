@@ -12,6 +12,7 @@ class Message(BaseModel):
     role: str
     content: str
     chat_id: int
+    timestamp: Optional[str]
 
 
 class UserInput(BaseModel):
@@ -53,7 +54,8 @@ def create_table(conn):
                                         id integer PRIMARY KEY AUTOINCREMENT,
                                         role text NOT NULL,
                                         content text NOT NULL,
-                                        chat_id integer NOT NULL
+                                        chat_id integer NOT NULL,
+                                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                                     ); """
         c = conn.cursor()
         c.execute(sql_create_table)
@@ -167,3 +169,48 @@ async def get_messages(chat_id: int):
     conn.close()
 
     return MESSAGES
+
+
+# List all chat ids and their last message and time timestamp
+@app.get("/chats", response_model=List[Message])
+async def get_chats():
+    conn = create_connection()
+    cursor = conn.cursor()
+
+    # Fetch all messages for the chat id
+    cursor.execute(
+        "SELECT chat_id, role, content, timestamp, MAX(id) FROM messages GROUP BY chat_id"
+    )
+    chats = [
+        {
+            "chat_id": row[0], 
+            "content": row[2],
+            "role": row[1],
+            # convert timestamp to string
+            "timestamp": row[3]
+        } for row in cursor.fetchall()
+    ]
+
+    print(chats)
+    conn.close()
+
+    return chats
+
+# Search messages for text string
+@app.get("/search/{text}", response_model=List[Message])
+async def search_messages(text: str):
+    conn = create_connection()
+    cursor = conn.cursor()
+
+    # Fetch all messages for the chat id
+    cursor.execute(
+        "SELECT * FROM messages WHERE content LIKE ?", ('%' + text + '%',)
+    )
+    searchResults = [
+        {"role": row[1], "content": row[2], "chat_id": row[3]}
+        for row in cursor.fetchall()
+    ]
+
+    conn.close()
+
+    return searchResults
