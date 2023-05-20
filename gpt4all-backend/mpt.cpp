@@ -227,7 +227,7 @@ bool mpt_model_load(const std::string &fname, std::istream &fin, mpt_model & mod
         case 1: wtype = GGML_TYPE_F16;  break;
         case 2: wtype = GGML_TYPE_Q4_0; break;
         case 3: wtype = GGML_TYPE_Q4_1; break;
-        case 5: wtype = GGML_TYPE_Q4_2; break;
+        // case 5: wtype = GGML_TYPE_Q4_2; break;
         default:
                 {
                     fprintf(stderr, "%s: invalid model file '%s' (bad f16 value %d)\n",
@@ -550,7 +550,7 @@ bool mpt_eval(
 
 
             // Alibi
-            struct ggml_tensor * KQ_scaled_biased = ggml_alibi(ctx0, ggml_cont(ctx0, KQ_scaled), n_past, n_head);
+            struct ggml_tensor * KQ_scaled_biased = ggml_alibi(ctx0, ggml_cont(ctx0, KQ_scaled), n_past, n_head, 0.0);
 
             // KQ_masked = mask_past(KQ_scaled)
             struct ggml_tensor * KQ_masked = ggml_diag_mask_inf(ctx0, KQ_scaled_biased, n_past);

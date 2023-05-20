@@ -49,7 +49,7 @@ bool LLamaModel::loadModel(const std::string &modelPath)
 
     gpt_params params;
     d_ptr->params.n_ctx      = 2048;
-    d_ptr->params.n_parts    = params.n_parts;
+    // d_ptr->params.n_parts    = params.n_parts;
     d_ptr->params.seed       = params.seed;
     d_ptr->params.f16_kv     = params.memory_f16;
     d_ptr->params.use_mmap   = params.use_mmap;
@@ -97,7 +97,8 @@ size_t LLamaModel::saveState(uint8_t *dest) const
 
 size_t LLamaModel::restoreState(const uint8_t *src)
 {
-    return llama_set_state_data(d_ptr->ctx, src);
+    // return llama_set_state_data(d_ptr->ctx, src);
+    return 0;
 }
 
 void LLamaModel::prompt(const std::string &prompt,
@@ -181,10 +182,21 @@ void LLamaModel::prompt(const std::string &prompt,
     for (int i = 0; i < promptCtx.n_predict; i++) {
         // sample next token
         const size_t n_prev_toks = std::min((size_t) promptCtx.repeat_last_n, promptCtx.tokens.size());
-        llama_token id = llama_sample_top_p_top_k(d_ptr->ctx,
-            promptCtx.tokens.data() + promptCtx.tokens.size() - n_prev_toks,
-            n_prev_toks, promptCtx.top_k, promptCtx.top_p, promptCtx.temp,
-            promptCtx.repeat_penalty);
+        // llama_token id = llama_sample_top_p_top_k(d_ptr->ctx,
+        //     promptCtx.tokens.data() + promptCtx.tokens.size() - n_prev_toks,
+        //     n_prev_toks, promptCtx.top_k, promptCtx.top_p, promptCtx.temp,
+        //     promptCtx.repeat_penalty);
+
+        auto logits = llama_get_logits(d_ptr->ctx);
+        auto n_vocab = llama_n_vocab(d_ptr->ctx);
+        std::vector<llama_token_data> candidates;
+        candidates.reserve(n_vocab);
+        for (llama_token token_id = 0; token_id < n_vocab; token_id++)
+        {
+            candidates.emplace_back(llama_token_data{token_id, logits[token_id], 0.0f});
+        }
+        llama_token_data_array candidates_p = {candidates.data(), candidates.size(), false};
+        auto id = llama_sample_token(d_ptr->ctx, &candidates_p);
 
         // Check if the context has run out...
         if (promptCtx.n_past + 1 > promptCtx.n_ctx) {

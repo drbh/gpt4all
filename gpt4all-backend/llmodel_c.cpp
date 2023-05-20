@@ -1,5 +1,6 @@
 #include "llmodel_c.h"
 
+#include "gpt2.h"
 #include "gptj.h"
 #include "llamamodel.h"
 #include "mpt.h"
@@ -8,6 +9,20 @@ struct LLModelWrapper {
     LLModel *llModel = nullptr;
     LLModel::PromptContext promptContext;
 };
+
+llmodel_model llmodel_gpt2_create()
+{
+    LLModelWrapper *wrapper = new LLModelWrapper;
+    wrapper->llModel = new GPT2;
+    return reinterpret_cast<void *>(wrapper);
+}
+
+void llmodel_gpt2_destroy(llmodel_model gpt2)
+{
+    LLModelWrapper *wrapper = reinterpret_cast<LLModelWrapper *>(gpt2);
+    delete wrapper->llModel;
+    delete wrapper;
+}
 
 llmodel_model llmodel_gptj_create()
 {
@@ -61,6 +76,7 @@ llmodel_model llmodel_model_create(const char *model_path) {
     if (magic == 0x67676d6c) { model = llmodel_gptj_create();  }
     else if (magic == 0x67676a74) { model = llmodel_llama_create(); }
     else if (magic == 0x67676d6d) { model = llmodel_mpt_create();   }
+    else if (magic == 0x67676d32) { model = llmodel_gpt2_create();  }
     else  {fprintf(stderr, "Invalid model file\n");}
     fclose(f);
     return model;
@@ -74,6 +90,7 @@ void llmodel_model_destroy(llmodel_model model) {
     if (modelTypeInfo == typeid(GPTJ))       { llmodel_gptj_destroy(model);  }
     if (modelTypeInfo == typeid(LLamaModel)) { llmodel_llama_destroy(model); }
     if (modelTypeInfo == typeid(MPT))        { llmodel_mpt_destroy(model);   }
+    if (modelTypeInfo == typeid(GPT2))       { llmodel_gpt2_destroy(model);  }
 }
 
 bool llmodel_loadModel(llmodel_model model, const char *model_path)

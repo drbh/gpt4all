@@ -60,6 +60,18 @@ typedef bool (*llmodel_response_callback)(int32_t token_id, const char *response
 typedef bool (*llmodel_recalculate_callback)(bool is_recalculating);
 
 /**
+ * Create a GPT2 instance.
+ * @return A pointer to the GPT2 instance.
+ */
+llmodel_model llmodel_gpt2_create();
+
+/**
+ * Destroy a GPT2 instance.
+ * @param gpt2 A pointer to the GPT2 instance.
+ */
+void llmodel_gpt2_destroy(llmodel_model gpt2);
+
+/**
  * Create a GPTJ instance.
  * @return A pointer to the GPTJ instance.
  */

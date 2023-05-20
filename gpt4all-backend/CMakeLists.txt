@@ -36,6 +36,7 @@ endif()
 add_subdirectory(llama.cpp)
 
 add_library(llmodel
+    gpt2.h gpt2.cpp
     gptj.h gptj.cpp
     llamamodel.h llamamodel.cpp
     llama.cpp/examples/common.cpp
